@@ -53,7 +53,7 @@ fn main() {
         let word = result.get(index);
         match word.unwrap().get_word() {
             "let" | "var" | "const" => {
-                statement::LetStatement::build(word);
+                // statement::LetStatement::build(word);
             }
             o => {
                 panic!("unsupported {o}")
