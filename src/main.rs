@@ -1,7 +1,7 @@
 #![allow(warnings)]
 mod statement;
 
-use crate::statement::WordList;
+use crate::statement::*;
 use std::fs::File;
 use std::io::Read;
 
@@ -15,7 +15,10 @@ fn main() {
         .expect("Failed to read file");
     println!("{:#?}", str);
 
-    let mut result: Vec<Word> = vec![];
+    let mut result: Vec<Word> = vec![Word {
+        content: "".to_string(),
+        key: KeyWord::Empty,
+    }];
     let mut i = 0;
     loop {
         // print!("main {i}\n");
@@ -46,14 +49,22 @@ fn main() {
     };
 
     loop {
-        if word_list.check_next() == None {
+        if word_list.check_next().is_none() {
             break;
         }
         let word = word_list.check_next();
         match word {
-            Some(word) => match &word[..] {
+            Some(word) => match word.content.as_str() {
                 "let" | "var" | "const" => {
-                    statement::LetStatement::build(&mut word_list);
+                    let d = VariableDeclaration::build(&mut word_list);
+                    print!("{d:?}");
+                }
+                "for" => {
+                    let d = ForStatement::build(&mut word_list);
+                    print!("{d:?}");
+                }
+                "\r" | "\n" => {
+                    word_list.next();
                 }
                 o => {
                     panic!("unsupported {o}")
@@ -64,8 +75,9 @@ fn main() {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum KeyWord {
+    Empty,
     Let,
     For,
     Variable,
