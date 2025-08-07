@@ -1,9 +1,9 @@
 #![allow(warnings)]
 mod statement;
 
+use crate::statement::{WordList};
 use std::fs::File;
 use std::io::Read;
-use crate::statement::Statement;
 
 fn main() {
     let mut str = String::new();
@@ -40,24 +40,26 @@ fn main() {
     }
     print!("{:#?}", result);
 
-    let mut index = 0;
-    let next_word = || -> &str {
-        let word = result.get(index);
-        word.unwrap().get_word()
+    let mut word_list = WordList {
+        index: 0,
+        list: result,
     };
 
     loop {
-        if index >= result.len() {
+        if word_list.check_next() == None {
             break;
         }
-        let word = result.get(index);
-        match word.unwrap().get_word() {
-            "let" | "var" | "const" => {
-                statement::LetStatement::build(word);
-            }
-            o => {
-                panic!("unsupported {o}")
-            }
+        let word = word_list.check_next();
+        match word {
+            Some(word) => match &word[..] {
+                "let" | "var" | "const" => {
+                    statement::LetStatement::build(&mut word_list);
+                }
+                o => {
+                    panic!("unsupported {o}")
+                }
+            },
+            None => break,
         }
     }
 }

@@ -1,67 +1,90 @@
-pub trait Statement<'a> {
-    fn build<F, F1>(c: &'a str, next_word: &F, before_word: &F1) -> Self
-    where
-        F: Fn() -> &'a str,
-        F1: Fn();
+use crate::Word;
+
+pub struct WordList {
+    pub index: usize,
+    pub list: Vec<Word>,
 }
 
-pub struct LetStatement<'a> {
-    var: &'a str,
-    variable_list: Box<Vec<VariableStatement<'a>>>,
-}
+impl WordList {
+    pub fn next(&mut self) -> Option<String> {
+        self.index += 1;
+        if self.index - 1 >= self.list.len() {
+            return None;
+        }
+        Some(
+            self.list
+                .get(self.index - 1)
+                .unwrap()
+                .get_word()
+                .to_string(),
+        )
+    }
 
-impl<'a> Statement<'a> for LetStatement<'a> {
-    fn build<F, F1>(c: &'a str, next_word: &F, before_word: &F1) -> Self
-    where
-        F: Fn() -> &'a str,
-        F1: Fn(),
-    {
-        let mut variable_list = Box::new(vec![]);
-        variable_list.push(VariableStatement::build(
-            next_word(),
-            &next_word,
-            &before_word,
-        ));
-        loop {
-            if next_word() == "," {
-                variable_list.push(VariableStatement::build(
-                    next_word(),
-                    &next_word,
-                    &before_word,
-                ));
-            } else {
-                before_word();
-                break;
-            }
+    pub fn before(&mut self) {
+        self.index -= 1
+    }
+
+    pub fn check_next(&self) -> Option<String> {
+        if self.index >= self.list.len() {
+            return None;
         }
-        LetStatement {
-            var: c,
-            variable_list,
-        }
+        Some(self.list.get(self.index).unwrap().get_word().to_string())
     }
 }
 
-pub struct VariableStatement<'a> {
-    name: &'a str,
-    value: &'a str,
+pub struct LetStatement {
+    var: String,
+    variable_list: Vec<VariableStatement>,
 }
 
-impl<'a> Statement<'a> for VariableStatement<'a> {
-    fn build<F, F1>(c: &'a str, next_word: &F, before_word: &F1) -> Self
-    where
-        F: Fn() -> &'a str,
-        F1: Fn(),
-    {
-        if next_word() == "=" {
-            return VariableStatement {
+impl LetStatement {
+    pub fn build(word_list: &mut WordList) {
+        let c = word_list.next().expect("expect let or var or const");
+
+        let mut let_statement = LetStatement {
+            var: c,
+            variable_list: vec![],
+        };
+
+        VariableStatement::build(&mut let_statement, word_list);
+    }
+}
+
+pub struct VariableStatement {
+    name: String,
+    value: String,
+}
+
+impl VariableStatement {
+    fn build(let_statement: &mut LetStatement, word_list: &mut WordList) {
+        loop {
+            let c = word_list.next().expect("export var name");
+
+            let v = VariableStatement {
                 name: c,
-                value: next_word(),
+                value: "".to_string(),
             };
-        }
-        before_word();
-        VariableStatement {
-            name: c,
-            value: "undefined",
+            let_statement.variable_list.push(v);
+
+            let c2 = word_list.next();
+            match c2 {
+                Some(word) => match &word[..] {
+                    "=" => {
+                        let_statement.variable_list.last_mut().unwrap().value =
+                            word_list.next().expect("= export value");
+                    }
+                    "," => {
+                        word_list.next();
+                    }
+                    "\r" | "\n" => {
+                        word_list.next();
+                    }
+                    _ => {
+                        panic!("parse error")
+                    }
+                },
+                None => break,
+            }
         }
     }
 }
