@@ -6,7 +6,7 @@ pub struct WordList {
 }
 
 impl WordList {
-    pub fn next(&mut self) -> Option<String> {
+    pub fn next(&mut self) -> Option<&Word> {
         self.index += 1;
         if self.index - 1 >= self.list.len() {
             return None;
@@ -16,7 +16,6 @@ impl WordList {
                 .get(self.index - 1)
                 .unwrap()
                 .get_word()
-                .to_string(),
         )
     }
 
@@ -24,11 +23,11 @@ impl WordList {
         self.index -= 1
     }
 
-    pub fn check_next(&self) -> Option<String> {
+    pub fn check_next(&self) -> Option<&Word> {
         if self.index >= self.list.len() {
             return None;
         }
-        Some(self.list.get(self.index).unwrap().get_word().to_string())
+        Some(self.list.get(self.index).unwrap().get_word())
     }
 }
 
@@ -39,10 +38,10 @@ pub struct LetStatement {
 
 impl LetStatement {
     pub fn build(word_list: &mut WordList) {
-        let c = word_list.next().expect("expect let or var or const");
+        let c = &word_list.next().expect("expect let or var or const").content;
 
         let mut let_statement = LetStatement {
-            var: c,
+            var: *c,
             variable_list: vec![],
         };
 
@@ -58,13 +57,6 @@ pub struct VariableStatement {
 impl VariableStatement {
     fn build(let_statement: &mut LetStatement, word_list: &mut WordList) {
         loop {
-            let c = word_list.next().expect("export var name");
-
-            let v = VariableStatement {
-                name: c,
-                value: "".to_string(),
-            };
-            let_statement.variable_list.push(v);
 
             let c2 = word_list.next();
             match c2 {

@@ -1,7 +1,7 @@
 #![allow(warnings)]
 mod statement;
 
-use crate::statement::{WordList};
+use crate::statement::WordList;
 use std::fs::File;
 use std::io::Read;
 
@@ -26,7 +26,7 @@ fn main() {
         match c {
             ' ' => i = i + 1,
             '\r' | '\n' | ';' | '=' | '(' | ')' | '<' | '>' | '+' | '{' | '}' | '.' => {
-                result.push(Word::new(&c.to_string()));
+                result.push(Word::new(&c.to_string(), KeyWord::Control));
                 i = i + 1
             }
             '_' | 'a'..='z' | 'A'..='Z' => {
@@ -65,18 +65,29 @@ fn main() {
 }
 
 #[derive(Debug)]
+enum KeyWord {
+    Let,
+    For,
+    Variable,
+    Digit,
+    Control,
+}
+
+#[derive(Debug)]
 struct Word {
-    word: String,
+    content: String,
+    key: KeyWord,
 }
 
 impl Word {
-    fn new(w: &str) -> Word {
+    fn new(w: &str, key: KeyWord) -> Word {
         Word {
-            word: String::from(w),
+            content: String::from(w),
+            key,
         }
     }
-    fn get_word(&self) -> &str {
-        &self.word
+    fn get_word(&self) -> &Word {
+        &self
     }
     fn read_word(i: &mut usize, source: &str) -> Word {
         let mut c = source.chars().nth(*i).unwrap();
@@ -95,7 +106,10 @@ impl Word {
                 }
             }
         }
-        Word { word }
+        Word {
+            content: word,
+            key: KeyWord::Variable,
+        }
     }
     fn read_digit(i: &mut usize, source: &str) -> Word {
         let mut c = source.chars().nth(*i).unwrap();
@@ -117,11 +131,9 @@ impl Word {
                 }
             }
         }
-        Word { word }
+        Word {
+            content: word,
+            key: KeyWord::Digit,
+        }
     }
-}
-
-enum KeyWord {
-    Let,
-    For,
 }
