@@ -16,8 +16,8 @@ fn main() {
     println!("{:#?}", str);
 
     let mut result: Vec<Word> = vec![Word {
-        content: "".to_string(),
-        key: KeyWord::Empty,
+        content: "\n".to_string(),
+        key: KeyWord::Control,
     }];
     let mut i = 0;
     loop {
@@ -28,7 +28,11 @@ fn main() {
         let c = str.chars().nth(i).unwrap();
         match c {
             ' ' => i = i + 1,
-            '\r' | '\n' | ';' | '=' | '(' | ')' | '<' | '>' | '+' | '{' | '}' | '.' => {
+            '+' | '-' | '*' | '/' | '%' | '>' | '<' | '|' => {
+                result.push(Word::read_operation(&mut i, &str))
+            }
+            '\r' | '\n' => result.push(Word::read_newline(&mut i, &str)),
+            ';' | '=' | '(' | ')' | '{' | '}' | '.' | '!' => {
                 result.push(Word::new(&c.to_string(), KeyWord::Control));
                 i = i + 1
             }
@@ -49,10 +53,10 @@ fn main() {
     };
 
     loop {
-        if word_list.check_next().is_none() {
+        if word_list.peek().is_none() {
             break;
         }
-        let word = word_list.check_next();
+        let word = word_list.peek();
         match word {
             Some(word) => match word.content.as_str() {
                 "let" | "var" | "const" => {
@@ -121,6 +125,59 @@ impl Word {
         Word {
             content: word,
             key: KeyWord::Variable,
+        }
+    }
+    fn read_operation(i: &mut usize, source: &str) -> Word {
+        let mut c = source.chars().nth(*i).unwrap();
+        let mut word = String::new();
+        word.push(c);
+        *i = *i + 1;
+        let next = source.chars().nth(*i);
+        match next {
+            Some(next) => match next {
+                '=' => match c {
+                    '+' | '-' | '*' | '/' | '%' => {
+                        *i = *i + 1;
+                        return Word {
+                            content: format!("{c}{next}"),
+                            key: KeyWord::Control,
+                        };
+                    }
+                    _ => {}
+                },
+                '+' | '-' | '>' | '<' | '|' => {
+                    if next == c {
+                        *i = *i + 1;
+                        return Word {
+                            content: format!("{c}{next}"),
+                            key: KeyWord::Control,
+                        };
+                    }
+                }
+                _ => {}
+            },
+            None => {}
+        }
+        Word {
+            content: format!("{c}"),
+            key: KeyWord::Control,
+        }
+    }
+    fn read_newline(i: &mut usize, source: &str) -> Word {
+        loop {
+            *i = *i + 1;
+            let c = source.chars().nth(*i);
+            match c {
+                Some(c) => match c {
+                    '\r' | '\n' | ' ' | '\t' => {}
+                    _ => break,
+                },
+                _ => break,
+            }
+        }
+        Word {
+            key: KeyWord::Control,
+            content: "\n".to_string(),
         }
     }
     fn read_digit(i: &mut usize, source: &str) -> Word {
