@@ -15,10 +15,7 @@ fn main() {
         .expect("Failed to read file");
     println!("{:#?}", str);
 
-    let mut result: Vec<Word> = vec![Word {
-        content: "\n".to_string(),
-        key: KeyWord::Control,
-    }];
+    let mut result: Vec<Word> = vec![];
     let mut i = 0;
     loop {
         // print!("main {i}\n");
@@ -53,10 +50,7 @@ fn main() {
     };
 
     loop {
-        if word_list.peek().is_none() {
-            break;
-        }
-        let word = word_list.peek();
+        let word = skip_empty(&mut word_list);
         match word {
             Some(word) => match word.content.as_str() {
                 "let" | "var" | "const" => {
@@ -67,9 +61,6 @@ fn main() {
                     let d = ForStatement::build(&mut word_list);
                     print!("{d:?}");
                 }
-                "\r" | "\n" => {
-                    word_list.next();
-                }
                 o => {
                     panic!("unsupported {o}")
                 }
@@ -79,13 +70,14 @@ fn main() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum KeyWord {
     Empty,
     Let,
     For,
     Variable,
     Digit,
+    String,
     Control,
 }
 

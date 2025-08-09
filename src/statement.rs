@@ -13,6 +13,9 @@ impl WordList {
         self.index += 1;
         self.list.get(self.index)
     }
+    pub fn next1(&mut self) {
+        self.index += 1;
+    }
     pub fn before(&mut self) {
         self.index -= 1
     }
@@ -22,9 +25,33 @@ impl WordList {
     pub fn peek_n(&self, n: usize) -> Option<&Word> {
         self.list.get(self.index + n)
     }
+    pub fn peek_not_empty_n(&self, n: usize) -> Option<&Word> {
+        let mut not_empty_c: usize = 0;
+        let mut peek_index: usize = 0;
+        loop {
+            match self.list.get(self.index + peek_index) {
+                Some(word) => match word.key {
+                    KeyWord::Control => match word.content.as_str() {
+                        "\r" | "\n" | " " | "\t" => {
+                            peek_index += 1;
+                            continue;
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                },
+                None => return None,
+            }
+            if not_empty_c == n {
+                break;
+            }
+            not_empty_c += 1;
+        }
+        self.list.get(self.index + peek_index)
+    }
 }
 
-pub fn skip_empty(word_list: &mut WordList) {
+pub fn skip_empty(word_list: &mut WordList) -> Option<&Word> {
     loop {
         match word_list.current() {
             Some(next) => match next.key {
@@ -38,11 +65,12 @@ pub fn skip_empty(word_list: &mut WordList) {
         }
         word_list.next();
     }
+    word_list.current()
 }
 
 fn expect(word_list: &mut WordList, s: &str) {
-    skip_empty(word_list);
-    match word_list.current() {
+    let word = skip_empty(word_list);
+    match word {
         Some(next) => {
             if next.content != s {
                 panic!("expect {s}")
@@ -51,12 +79,24 @@ fn expect(word_list: &mut WordList, s: &str) {
         None => panic!("expect {s}"),
     }
     word_list.next();
+    skip_empty(word_list);
 }
 
+fn expect_not_null(word_list: &mut WordList) -> Word {
+    let word = skip_empty(word_list);
+    if word.is_none() {
+        panic!("expect_not_null is null")
+    }
+    let content = word.unwrap().content.to_string();
+    let key = word.unwrap().key;
+    word_list.next();
+    skip_empty(word_list);
+    Word { content, key }
+}
 
 fn expect_array(word_list: &mut WordList, array: Vec<&str>) -> String {
-    skip_empty(word_list);
-    match word_list.current() {
+    let word = skip_empty(word_list);
+    match word {
         Some(next) => {
             if !array.contains(&next.content.as_str()) {
                 panic!("expect {array:?}")
@@ -67,17 +107,6 @@ fn expect_array(word_list: &mut WordList, array: Vec<&str>) -> String {
             }
         }
         None => panic!("expect {array:?}"),
-    }
-}
-
-fn expect_next(word_list: &mut WordList, s: &str) {
-    match word_list.next() {
-        Some(next) => {
-            if next.content != s {
-                panic!("expect {s}")
-            }
-        }
-        None => panic!("expect {s}"),
     }
 }
 
@@ -165,19 +194,20 @@ impl Node for BlockStatement {}
 impl Node for ExpressionStatement {}
 impl Node for EmptyStatement {}
 impl Node for CallExpression {}
+impl Node for MemberExpression {}
 
 impl VariableDeclaration {
-    pub fn build(word_list: &mut WordList) -> VariableDeclaration {
+    pub fn build(word_list: &mut WordList) -> Result<VariableDeclaration, String> {
         let kind = expect_array(word_list, vec!["var", "let", "const"]);
         let mut declarations = vec![];
-        declarations.push(VariableDeclarator::build(word_list));
+        declarations.push(VariableDeclarator::build(word_list)?);
         loop {
-            let c2 = word_list.peek();
+            let c2 = word_list.current();
             match c2 {
                 Some(word) => match word.content.as_str() {
                     "," => {
                         word_list.next();
-                        declarations.push(VariableDeclarator::build(word_list));
+                        declarations.push(VariableDeclarator::build(word_list)?);
                     }
                     "\r" | "\n" => {
                         word_list.next();
@@ -187,55 +217,57 @@ impl VariableDeclaration {
                 None => break,
             }
         }
-        VariableDeclaration { kind, declarations }
+        Ok(VariableDeclaration { kind, declarations })
     }
 }
 
 impl VariableDeclarator {
-    fn build(word_list: &mut WordList) -> VariableDeclarator {
-        skip_empty(word_list);
+    fn build(word_list: &mut WordList) -> Result<VariableDeclarator, String> {
+        let id = expect_not_null(word_list).content;
 
-        let id = word_list.next().expect("").content.to_string();
-        let mut equal = word_list.next();
-        if equal.is_none() {
-            return VariableDeclarator {
+        let mut equal = skip_empty(word_list);
+        if equal.is_none() || equal.unwrap().content != "=" {
+            return Ok(VariableDeclarator {
                 id,
                 init: "undefined".to_string(),
-            };
+            });
         }
-        if equal.unwrap().content != "=" {
-            panic!("expect =")
-        }
-        let value = word_list.next().expect("export variable value");
-        VariableDeclarator {
-            id,
-            init: value.content.to_string(),
+        word_list.next();
+        let value = expect_not_null(word_list);
+        match value.key {
+            KeyWord::Variable | KeyWord::Digit | KeyWord::String => Ok(VariableDeclarator {
+                id,
+                init: value.content.to_string(),
+            }),
+            _ => {
+                panic!("expect VariableDeclarator value is variable")
+            }
         }
     }
 }
 
 impl ForStatement {
-    pub fn build(word_list: &mut WordList) -> ForStatement {
+    pub fn build(word_list: &mut WordList) -> Result<ForStatement, String> {
         let init: Box<dyn Node>;
         let test: Box<dyn Node>;
         let update: Box<dyn Node>;
         let body: Box<dyn Node>;
         expect(word_list, "for");
         expect(word_list, "(");
-        let word = word_list.peek().expect("");
+        let word = word_list.current().expect("");
         match word.content.as_str() {
             ";" => {
                 init = Box::new(EmptyStatement {});
             }
             "let" | "var" | "const" => {
-                init = Box::new(VariableDeclaration::build(word_list));
+                init = Box::new(VariableDeclaration::build(word_list)?);
             }
             _ => {
-                init = Box::new(VariableDeclarator::build(word_list));
+                init = Box::new(VariableDeclarator::build(word_list)?);
             }
         }
         expect(word_list, ";");
-        let word1 = word_list.peek().expect("");
+        let word1 = word_list.current().expect("");
         match word1.content.as_str() {
             ";" => {
                 test = Box::new(EmptyStatement {});
@@ -245,20 +277,17 @@ impl ForStatement {
                 test = Box::new(BinaryExpression::build(word_list));
             }
         }
-        if word_list.next().expect("").content != ";" {
-            panic!("expect ;")
-        }
-        if word_list.peek().expect("").content != ")" {
-            update = Box::new(UpdateExpression::build(word_list));
+        expect(word_list, ";");
+        if word_list.current().expect("").content != ")" {
+            update = Box::new(UpdateExpression::build(word_list)?);
         } else {
             update = Box::new(EmptyStatement {});
         }
-        word_list.next().expect(")");
-
-        let word2 = word_list.peek().expect("expect for body");
+        expect(word_list, ")");
+        let word2 = word_list.current().expect("");
         match word2.content.as_str() {
             "{" => {
-                body = Box::new(BlockStatement::build(word_list));
+                body = Box::new(BlockStatement::build(word_list)?);
             }
             ";" => {
                 body = Box::new(EmptyStatement {});
@@ -268,89 +297,80 @@ impl ForStatement {
                 panic!("for()loss")
             }
         }
-        ForStatement {
+        Ok(ForStatement {
             init,
             test,
             update,
             body,
-        }
+        })
     }
 }
 
 impl AssignmentExpression {
-    pub fn build(word_list: &mut WordList) -> AssignmentExpression {
+    pub fn build(word_list: &mut WordList) -> Result<AssignmentExpression, String> {
         todo!()
     }
 }
 
 impl UpdateExpression {
-    pub fn build(word_list: &mut WordList) -> UpdateExpression {
-        skip_empty(word_list);
-
+    pub fn build(word_list: &mut WordList) -> Result<UpdateExpression, String> {
         let operator;
         let argument: Box<dyn Node>;
         let prefix;
+        skip_empty(word_list);
 
-        match word_list.peek().expect("").key {
+        match word_list.current().expect("").key {
             KeyWord::Control => {
                 prefix = true;
-                operator = word_list.next().expect("").content.to_string();
+                operator = expect_not_null(word_list).content;
                 argument = Box::new(Identifier {
-                    name: word_list.next().expect("").content.to_string(),
+                    name: expect_not_null(word_list).content,
                 });
             }
             _ => {
                 prefix = false;
                 argument = Box::new(Identifier {
-                    name: word_list.next().expect("").content.to_string(),
+                    name: expect_not_null(word_list).content,
                 });
-                operator = word_list.next().expect("").content.to_string();
+                operator = expect_not_null(word_list).content;
             }
         }
 
-        UpdateExpression {
+        Ok(UpdateExpression {
             operator,
             argument,
             prefix,
-        }
+        })
     }
 }
 
 impl BlockStatement {
-    pub fn build(word_list: &mut WordList) -> BlockStatement {
-        skip_empty(word_list);
-
+    pub fn build(word_list: &mut WordList) -> Result<BlockStatement, String> {
         let mut body: Vec<Box<dyn Node>> = vec![];
-        if word_list.next().expect("").content != "{" {
-            panic!("expect {{")
-        }
+        expect(word_list, "{");
 
         loop {
-            let expression_statement = ExpressionStatement::build(word_list);
-            if word_list.peek().expect("").content == "}" {
+            let expression_statement = ExpressionStatement::build(word_list)?;
+            if skip_empty(word_list).expect("").content == "}" {
                 break;
             }
             body.push(Box::new(expression_statement));
         }
 
-        if word_list.next().expect("").content != "}" {
-            panic!("expect }}")
-        }
-        BlockStatement { body }
+        expect(word_list, "}");
+        Ok(BlockStatement { body })
     }
 }
 
 impl ExpressionStatement {
-    pub fn build(word_list: &mut WordList) -> ExpressionStatement {
-        skip_empty(word_list);
-
+    pub fn build(word_list: &mut WordList) -> Result<ExpressionStatement, String> {
         let expression: Box<dyn Node>;
-
-        match word_list.peek() {
+        let current = skip_empty(word_list);
+        match current {
             Some(next) => match next.key {
                 KeyWord::Control => match next.content.as_str() {
                     "++" | "--" => {
-                        expression = Box::new(UpdateExpression::build(word_list));
+                        expression = Box::new(UpdateExpression::build(word_list)?);
                     }
                     "+" | "-" | "!" => {
                         panic!("not support")
@@ -359,7 +379,7 @@ impl ExpressionStatement {
                         panic!("not support")
                     }
                 },
-                KeyWord::Variable => match word_list.peek_n(2) {
+                KeyWord::Variable => match word_list.peek_not_empty_n(1) {
                     Some(next2) => match next2.key {
                         KeyWord::Control => match next2.content.as_str() {
                             "++" | "--" => {
@@ -368,19 +388,12 @@ impl ExpressionStatement {
                             "+=" | "-=" | "*=" | "/=" | "%=" | "===" => {
                                 panic!("not support")
                             }
-                            "\n" => match word_list.peek_n(3) {
-                                Some(next3) => match next3.key {
-                                    KeyWord::Variable => {
-                                        expression = Box::new(Identifier {
-                                            name: word_list.next().unwrap().content.to_string(),
-                                        });
-                                    }
-                                    _ => {
-                                        panic!("not support")
-                                    }
-                                },
-                                _ => panic!("not support"),
-                            },
+                            "." => {
+                                expression = Box::new(MemberExpression::build(word_list)?);
+                            }
+                            "(" => {
+                                expression = Box::new(CallExpression::build(word_list)?);
+                            }
                             _ => {
                                 panic!("not support")
                             }
@@ -405,12 +418,12 @@ impl ExpressionStatement {
             }
         }
 
-        ExpressionStatement { expression }
+        Ok(ExpressionStatement { expression })
     }
 }
 
 impl CallExpression {
-    pub fn build(word_list: &mut WordList) -> CallExpression {
+    pub fn build(word_list: &mut WordList) -> Result<CallExpression, String> {
         skip_empty(word_list);
 
         let callee: Box<dyn Node>;
@@ -421,11 +434,11 @@ impl CallExpression {
         if word_list.next().expect("").content != "(" {
             panic!("call (loss")
         }
-        arguments = ExpressionStatement::build(word_list).expression;
+        arguments = ExpressionStatement::build(word_list)?.expression;
         if word_list.next().expect("").content != ")" {
             panic!("call )loss")
         }
-        CallExpression { callee, arguments }
+        Ok(CallExpression { callee, arguments })
     }
 }
 
@@ -449,5 +462,34 @@ impl BinaryExpression {
             right,
             operator,
         }
+    }
+}
+
+fn get_variable_value(word: Option<&Word>) -> Result<String, String> {
+    match word {
+        Some(word) => match word.key {
+            KeyWord::Variable => Ok(word.content.to_string()),
+            _ => Err("expect variable".to_string()),
+        },
+        None => Err("expect variable, but None".to_string()),
+    }
+}
+
+impl MemberExpression {
+    pub fn build(word_list: &mut WordList) -> Result<MemberExpression, String> {
+        let object: Box<dyn Node>;
+        let property: Box<dyn Node>;
+
+        object = Box::new(Identifier {
+            name: get_variable_value(skip_empty(word_list))?,
+        });
+        word_list.next();
+        expect(word_list, ".");
+
+        property = Box::new(Identifier {
+            name: get_variable_value(skip_empty(word_list))?,
+        });
+
+        Ok(MemberExpression { object, property })
     }
 }

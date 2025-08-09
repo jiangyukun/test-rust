@@ -8,6 +8,7 @@ for (
     ;
     i++
 ) {
+    a
     console
         .log
         (
