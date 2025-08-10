@@ -1,5 +1,5 @@
-pub fn lex(str: &str) -> Vec<Word> {
-    let mut result: Vec<Word> = vec![];
+pub fn lex(str: &str) -> Vec<Token> {
+    let mut result: Vec<Token> = vec![];
     let mut i = 0;
     loop {
         // print!("main {i}\n");
@@ -9,139 +9,98 @@ pub fn lex(str: &str) -> Vec<Word> {
         let c = str.chars().nth(i).unwrap();
         match c {
             ' ' => i = i + 1,
-            '+' | '-' | '*' | '/' | '%' | '>' | '<' | '|' => {
-                result.push(Word::read_operation(&mut i, &str))
+            '=' | '+' | '-' | '*' | '/' | '%' | '>' | '<' | '|' | '?' | ':' => {
+                result.push(read_operation(&mut i, &str))
             }
-            '\r' | '\n' => result.push(Word::read_newline(&mut i, &str)),
-            ';' | '=' | '(' | ')' | '{' | '}' | '.' | '!' => {
-                result.push(Word::new(c.to_string(), KeyWord::Control));
+            '\r' | '\n' => result.push(read_newline(&mut i, &str)),
+            ';' | '(' | ')' | '{' | '}' | '.' | '!' => {
+                result.push(Token::Control(c.to_string()));
                 i = i + 1
             }
             '_' | 'a'..='z' | 'A'..='Z' => {
-                result.push(Word::read_word(&mut i, &str));
+                result.push(read_word(&mut i, &str));
             }
             '0'..='9' => {
-                result.push(Word::read_digit(&mut i, &str));
+                result.push(read_digit(&mut i, &str));
             }
             _ => panic!("Unrecognized character {c}"),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum KeyWord {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Token {
     Empty,
     Let,
     For,
-    Variable,
-    Digit,
+    Variable(String),
+    Digit(String),
     String,
-    Control,
+    Control(String),
+    EOF,
 }
 
-#[derive(Debug)]
-pub struct Word {
-    content: String,
-    key: KeyWord,
-}
-
-impl Word {
-    pub fn new(w: String, key: KeyWord) -> Word {
-        Word { content: w, key }
-    }
-    pub fn content(&self) -> &str {
-        &self.content
-    }
-    pub fn key(&self) -> KeyWord {
-        self.key
-    }
-    fn get_word(&self) -> &Word {
-        &self
-    }
-    fn read_word(i: &mut usize, source: &str) -> Word {
-        let mut c = source.chars().nth(*i).unwrap();
-        let mut word = String::new();
-        word.push(c);
-        loop {
-            *i = *i + 1;
-            // print!("word {i}\n");
-            c = source.chars().nth(*i).unwrap();
-            match c {
-                '_' | 'a'..='z' | 'A'..='Z' | '0'..='9' => {
-                    word.push(c);
-                }
-                _ => {
-                    break;
-                }
-            }
-        }
-        Word {
-            content: word,
-            key: KeyWord::Variable,
-        }
-    }
-    fn read_operation(i: &mut usize, source: &str) -> Word {
-        let mut c = source.chars().nth(*i).unwrap();
-        let mut word = String::new();
-        word.push(c);
+fn read_word(i: &mut usize, source: &str) -> Token {
+    let mut c = source.chars().nth(*i).unwrap();
+    let mut word = String::new();
+    word.push(c);
+    loop {
         *i = *i + 1;
-        let next = source.chars().nth(*i);
-        match next {
-            Some(next) => match next {
-                '=' => match c {
-                    '+' | '-' | '*' | '/' | '%' => {
-                        *i = *i + 1;
-                        return Word {
-                            content: format!("{c}{next}"),
-                            key: KeyWord::Control,
-                        };
-                    }
-                    _ => {}
-                },
-                '+' | '-' | '>' | '<' | '|' => {
-                    if next == c {
-                        *i = *i + 1;
-                        return Word {
-                            content: format!("{c}{next}"),
-                            key: KeyWord::Control,
-                        };
-                    }
-                }
-                _ => {}
+        // print!("word {i}\n");
+        let d = source.chars().nth(*i);
+        match d {
+            Some(d) => match d {
+                '_' | 'a'..='z' | 'A'..='Z' | '0'..='9' => word.push(c),
+                _ => break,
             },
-            None => {}
-        }
-        Word {
-            content: format!("{c}"),
-            key: KeyWord::Control,
+            None => break,
         }
     }
-    fn read_newline(i: &mut usize, source: &str) -> Word {
-        loop {
-            *i = *i + 1;
-            let c = source.chars().nth(*i);
-            match c {
-                Some(c) => match c {
-                    '\r' | '\n' | ' ' | '\t' => {}
-                    _ => break,
-                },
-                _ => break,
+    Token::Variable(word)
+}
+fn read_operation(i: &mut usize, source: &str) -> Token {
+    let mut c = source.chars().nth(*i).unwrap();
+    let mut word = String::new();
+    word.push(c);
+    loop {
+        *i = *i + 1;
+        // print!("digit {i}\n");
+        c = source.chars().nth(*i).unwrap();
+        match c {
+            '=' | '+' | '-' | '*' | '/' | '%' | '>' | '<' | '|' | '?' | ':' => {
+                word.push(c);
+            }
+            _ => {
+                break;
             }
         }
-        Word {
-            key: KeyWord::Control,
-            content: "\n".to_string(),
+    }
+    Token::Control(word)
+}
+fn read_newline(i: &mut usize, source: &str) -> Token {
+    loop {
+        *i = *i + 1;
+        let c = source.chars().nth(*i);
+        match c {
+            Some(c) => match c {
+                '\r' | '\n' | ' ' | '\t' => {}
+                _ => break,
+            },
+            _ => break,
         }
     }
-    fn read_digit(i: &mut usize, source: &str) -> Word {
-        let mut c = source.chars().nth(*i).unwrap();
-        let mut word = String::new();
-        word.push(c);
-        loop {
-            *i = *i + 1;
-            // print!("digit {i}\n");
-            c = source.chars().nth(*i).unwrap();
-            match c {
+    Token::Control("\n".to_string())
+}
+
+fn read_digit(i: &mut usize, source: &str) -> Token {
+    let mut c = source.chars().nth(*i).unwrap();
+    let mut word = String::new();
+    word.push(c);
+    loop {
+        *i = *i + 1;
+        let c = source.chars().nth(*i);
+        match c {
+            Some(c) => match c {
                 '_' => {
                     word.push(c);
                 }
@@ -152,10 +111,62 @@ impl Word {
                     break;
                 }
             }
+            None => break
         }
-        Word {
-            content: word,
-            key: KeyWord::Digit,
+    }
+    Token::Digit(word)
+}
+
+pub struct WordList {
+    pub index: usize,
+    pub list: Vec<Token>,
+}
+
+impl WordList {
+    pub fn current(&mut self) -> Token {
+        self.peek_n(0)
+    }
+    pub fn next(&mut self) -> &Token {
+        self.index += 1;
+        self.list.get(self.index).unwrap_or_else(|| &Token::EOF)
+    }
+    pub fn next1(&mut self) {
+        self.index += 1;
+    }
+    pub fn before(&mut self) {
+        self.index -= 1
+    }
+    pub fn peek(&self) -> Token {
+        self.peek_n(1)
+    }
+    pub fn peek_n(&self, n: usize) -> Token {
+        self.list
+            .get(self.index + n)
+            .unwrap_or_else(|| &Token::EOF)
+            .clone()
+    }
+    pub fn peek_not_empty_n(&self, n: usize) -> &Token {
+        let mut not_empty_c: usize = 0;
+        let mut peek_index: usize = 0;
+        loop {
+            match self.peek_n(peek_index) {
+                Token::Control(s) => match s.as_str() {
+                    "\r" | "\n" | "\t" => {
+                        peek_index += 1;
+                        continue;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+            if not_empty_c == n {
+                break;
+            }
+            peek_index += 1;
+            not_empty_c += 1;
         }
+        self.list
+            .get(self.index + peek_index)
+            .unwrap_or_else(|| &Token::EOF)
     }
 }
