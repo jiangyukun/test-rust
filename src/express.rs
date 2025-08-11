@@ -1,3 +1,4 @@
+use crate::express;
 use crate::lex::{Token, WordList};
 
 #[derive(Debug)]
@@ -37,6 +38,10 @@ pub enum Node {
         consequent: Box<Node>,
         alternate: Box<Node>,
     },
+    CallExpression {
+        callee: Box<Node>,
+        arguments: Vec<Box<Node>>,
+    },
 }
 
 #[cfg(test)]
@@ -49,7 +54,7 @@ mod test {
         let list = vec![
             // "a.b.c",
             // "c = a + +b + d++",
-            "c = a ? 1+2 : 2+3",
+            "c = a ? b(d) : 2+3",
         ];
         for item in list {
             let result = lex(item);
@@ -84,6 +89,16 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
                         prefix: true,
                         argument: Box::new(parse_expression(word_list, l + 1)?),
                     });
+                }
+                "(" => {
+                    word_list.next();
+                    let express = parse_expression(word_list, 0)?;
+                    word_list.next();
+                    if !is_ctrl_word(&word_list.current(), ")") {
+                        return Err("expect )".to_string());
+                    }
+                    word_list.next();
+                    return Ok(express);
                 }
                 _ => {}
             }
@@ -140,6 +155,26 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
                         alternate: Box::new(alternate),
                     });
                 }
+                "(" => {
+                    word_list.next();
+                    let mut arguments: Vec<Box<Node>> = vec![];
+                    loop {
+                        let next = word_list.peek();
+                        if is_ctrl_word(&next, ")") {
+                            break;
+                        }
+                        let express = parse_expression(word_list, 0)?;
+                        arguments.push(Box::new(express));
+                        let next = word_list.peek();
+                        if !is_ctrl_word(&next, ",") {
+                            break;
+                        }
+                    }
+                    return Ok(Node::CallExpression {
+                        callee: Box::new(left),
+                        arguments,
+                    });
+                }
                 _ => {}
             },
             _ => return Err("operator err".to_string()),
@@ -174,7 +209,7 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
 fn get_level(token: &Token) -> Result<u8, String> {
     let d = match token {
         Token::Control(s) => match s.as_str() {
-            "." | "[" | "(" | "?." => 20,
+            "." | "[" | "]" | "(" | ")" | "?." => 20,
             "new" => 19,
             "++" | "--" => 17,
             "!" | "~" | "typeof" | "await" | "delete" => 16,
