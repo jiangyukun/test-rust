@@ -62,7 +62,6 @@ pub enum Node {
 #[cfg(test)]
 mod test {
     use crate::express::parse_expression;
-    use crate::lex::lex;
     use crate::parser::Parser;
 
     #[test]
@@ -70,12 +69,11 @@ mod test {
         let list = vec![
             // "a.b.c",
             // "c = a + +b + d++",
-            "c = a ? b(d) : 2+3",
+            "c = a ? b(d,e,f) : 2+3",
         ];
         for item in list {
-            let result = lex(item);
-            let mut parser = Parser::new(result);
-            let node = parse_expression(&mut parser, 0);
+            let mut parser = Parser::new(item.to_string());
+            let node = parse_expression(&mut parser, 1);
             print!("{node:#?}\n");
         }
     }
@@ -105,7 +103,7 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Node, Stri
                 }
                 "(" => {
                     parser.next();
-                    let express = parse_expression(parser, 0)?;
+                    let express = parse_expression(parser, 1)?;
                     parser.next();
                     if !is_ctrl_word(&parser.current, ")") {
                         return Err("expect )".to_string());
@@ -116,7 +114,7 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Node, Stri
                 _ => {}
             }
         }
-        return Err("..".to_string());
+        return Err("expect control,".to_string());
     }
     let mut left: Node;
 
@@ -131,15 +129,24 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Node, Stri
     } else {
         return Err("".to_string());
     }
-    if is_ctrl_word(&parser.peek(), ":") {
+    if is_ctrl_word(&parser.lookahead, ":") {
+        return Ok(left);
+    }
+    if is_ctrl_word(&parser.lookahead, ")") {
+        return Ok(left);
+    }
+    if is_ctrl_word(&parser.lookahead, "]") {
+        return Ok(left);
+    }
+    if is_ctrl_word(&parser.lookahead, ",") {
         return Ok(left);
     }
     loop {
-        let operator = &parser.peek().clone();
+        let operator = &parser.lookahead.clone();
         if *operator == Token::EOF {
             break;
         }
-        let l = get_level(operator)?;
+        let l = get_level(&operator)?;
         if l < min_level {
             break;
         }
@@ -172,14 +179,18 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Node, Stri
                     parser.next();
                     let mut arguments: Vec<Box<Node>> = vec![];
                     loop {
-                        let next = parser.peek();
+                        let next = &parser.current;
                         if is_ctrl_word(&next, ")") {
                             break;
                         }
-                        let express = parse_expression(parser, 0)?;
+                        let express = parse_expression(parser, 1)?;
                         arguments.push(Box::new(express));
-                        let next = parser.peek();
-                        if !is_ctrl_word(&next, ",") {
+                        parser.next();
+                        let current = &parser.current.clone();
+                        if is_ctrl_word(&current, ",") {
+                            parser.next();
+                        }
+                        if is_ctrl_word(&current, ")") {
                             break;
                         }
                     }
@@ -192,21 +203,25 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Node, Stri
             },
             _ => return Err("operator err".to_string()),
         }
-        parser.next();
-        let right = parse_expression(parser, l + 1)?;
 
-        if is_ctrl_word(operator, ".") {
+        if is_ctrl_word(&operator, ".") {
+            parser.next();
+            let right = parse_expression(parser, l + 1)?;
             left = Node::MemberExpression {
                 object: Box::new(left),
                 property: Box::new(right),
             }
-        } else if is_ctrl_word(operator, "=") {
+        } else if is_ctrl_word(&operator, "=") {
+            parser.next();
+            let right = parse_expression(parser, l + 1)?;
             left = Node::AssignmentExpression {
                 operator: "=".to_string(),
                 left: Box::new(left),
                 right: Box::new(right),
             }
-        } else if is_ctrl_word(operator, "+") {
+        } else if is_ctrl_word(&operator, "+") {
+            parser.next();
+            let right = parse_expression(parser, l + 1)?;
             left = Node::BinaryExpression {
                 operator: "+".to_string(),
                 left: Box::new(left),

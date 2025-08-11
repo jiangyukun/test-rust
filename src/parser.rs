@@ -1,72 +1,28 @@
-use crate::lex::Token;
+use crate::lex::{Lex, Token};
 
 pub struct Parser {
     pub current: Token,
     pub lookahead: Token,
-
+    lex: Lex,
 }
 
 impl Parser {
-    pub fn new(lex: Lex) -> Parser {
+    pub fn new(input: String) -> Parser {
+        let mut lex = Lex::new(input.to_string());
         let parser = Parser {
             current: lex.next(),
             lookahead: lex.next(),
-
+            lex,
         };
 
         parser
     }
 
-
-    
     pub fn next(&mut self) {
-        self.index += 1;
-        self.current = self
-            .list
-            .get(self.index)
-            .unwrap_or_else(|| &Token::EOF)
-            .clone();
-        self.lookahead = self
-            .list
-            .get(self.index + 1)
-            .unwrap_or_else(|| &Token::EOF)
-            .clone()
-    }
-    pub fn peek(&self) -> &Token {
-        self.peek_not_empty_n(1)
-    }
-    pub fn peek_n(&self, n: usize) -> Token {
-        self.list
-            .get(self.index + n)
-            .unwrap_or_else(|| &Token::EOF)
-            .clone()
-    }
-    pub fn peek_not_empty_n(&self, n: usize) -> &Token {
-        let mut not_empty_c: usize = 0;
-        let mut peek_index: usize = 0;
-        loop {
-            match self.peek_n(peek_index) {
-                Token::Control(s) => match s.as_str() {
-                    "\r" | "\n" | "\t" => {
-                        peek_index += 1;
-                        continue;
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-            if not_empty_c == n {
-                break;
-            }
-            peek_index += 1;
-            not_empty_c += 1;
-        }
-        self.list
-            .get(self.index + peek_index)
-            .unwrap_or_else(|| &Token::EOF)
+        self.current = self.lookahead.clone();
+        self.lookahead = self.lex.next();
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -75,22 +31,11 @@ mod test {
 
     #[test]
     fn test1() {
-        let list = vec![
-            Token::LF,
-            Token::LF,
-            Token::Variable("let".to_string()),
-            Token::LF,
-            Token::Variable("a".to_string()),
-            Token::LF,
-            Token::LF,
-            Token::Control("=".to_string()),
-            Token::LF,
-            Token::Variable("b".to_string()),
-            Token::Control("+".to_string()),
-            Token::Variable("c".to_string()),
-        ];
-        let parser = Parser::new(list);
+
+        let mut parser = Parser::new(" \n let \n a \n = \n b\n ".to_string());
 
         assert_eq!(Token::Variable("let".to_string()), parser.current);
+        parser.next();
+        assert_eq!(Token::Variable("a".to_string()), parser.current);
     }
 }
