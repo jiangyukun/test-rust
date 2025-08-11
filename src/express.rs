@@ -1,13 +1,22 @@
-use crate::express;
-use crate::lex::{Token, WordList};
+use crate::lex::Token;
+use crate::parser::Parser;
 
 #[derive(Debug)]
 pub enum Node {
+    EmptyStatement {},
     Identity {
         name: String,
     },
     NumericLiteral {
         value: String,
+    },
+    VariableDeclaration {
+        kind: String,
+        declarations: Vec<Box<Node>>,
+    },
+    VariableDeclarator {
+        id: Box<Node>,
+        init: Box<Node>,
     },
     AssignmentExpression {
         left: Box<Node>,
@@ -42,12 +51,19 @@ pub enum Node {
         callee: Box<Node>,
         arguments: Vec<Box<Node>>,
     },
+    ForStatement {
+        init: Box<Node>,
+        test: Box<Node>,
+        update: Box<Node>,
+        body: Box<Node>,
+    },
 }
 
 #[cfg(test)]
 mod test {
     use crate::express::parse_expression;
-    use crate::lex::{WordList, lex};
+    use crate::lex::lex;
+    use crate::parser::Parser;
 
     #[test]
     fn a() {
@@ -58,46 +74,43 @@ mod test {
         ];
         for item in list {
             let result = lex(item);
-            let mut word_list = WordList {
-                index: 0,
-                list: result,
-            };
-            let node = parse_expression(&mut word_list, 0);
+            let mut parser = Parser::new(result);
+            let node = parse_expression(&mut parser, 0);
             print!("{node:#?}\n");
         }
     }
 }
 
-fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, String> {
-    let word = word_list.current();
+pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Node, String> {
+    let word = parser.current.clone();
     if is_ctrl(&word) {
         let l = get_level(&word)?;
         if let Token::Control(s) = word {
             match s.as_str() {
                 "++" => {
-                    word_list.next();
+                    parser.next();
                     return Ok(Node::UpdateExpression {
                         operator: s.to_string(),
                         prefix: true,
-                        argument: Box::new(parse_expression(word_list, l + 1)?),
+                        argument: Box::new(parse_expression(parser, l + 1)?),
                     });
                 }
                 "+" | "-" | "!" | "typeof" => {
-                    word_list.next();
+                    parser.next();
                     return Ok(Node::UnaryExpression {
                         operator: s.to_string(),
                         prefix: true,
-                        argument: Box::new(parse_expression(word_list, l + 1)?),
+                        argument: Box::new(parse_expression(parser, l + 1)?),
                     });
                 }
                 "(" => {
-                    word_list.next();
-                    let express = parse_expression(word_list, 0)?;
-                    word_list.next();
-                    if !is_ctrl_word(&word_list.current(), ")") {
+                    parser.next();
+                    let express = parse_expression(parser, 0)?;
+                    parser.next();
+                    if !is_ctrl_word(&parser.current, ")") {
                         return Err("expect )".to_string());
                     }
-                    word_list.next();
+                    parser.next();
                     return Ok(express);
                 }
                 _ => {}
@@ -118,11 +131,11 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
     } else {
         return Err("".to_string());
     }
-    if is_ctrl_word(&word_list.peek(), ":") {
+    if is_ctrl_word(&parser.peek(), ":") {
         return Ok(left);
     }
     loop {
-        let operator = &word_list.peek().clone();
+        let operator = &parser.peek().clone();
         if *operator == Token::EOF {
             break;
         }
@@ -130,7 +143,7 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
         if l < min_level {
             break;
         }
-        word_list.next();
+        parser.next();
         match operator {
             Token::Control(s) => match s.as_str() {
                 "++" | "--" => {
@@ -141,14 +154,14 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
                     });
                 }
                 "?" => {
-                    word_list.next();
-                    let consequent = parse_expression(word_list, l + 1)?;
-                    word_list.next();
-                    if !is_ctrl_word(&word_list.current(), ":") {
+                    parser.next();
+                    let consequent = parse_expression(parser, l + 1)?;
+                    parser.next();
+                    if !is_ctrl_word(&parser.current, ":") {
                         return Err("expect :".to_string());
                     }
-                    word_list.next();
-                    let alternate = parse_expression(word_list, l + 1)?;
+                    parser.next();
+                    let alternate = parse_expression(parser, l + 1)?;
                     return Ok(Node::ConditionalExpression {
                         test: Box::new(left),
                         consequent: Box::new(consequent),
@@ -156,16 +169,16 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
                     });
                 }
                 "(" => {
-                    word_list.next();
+                    parser.next();
                     let mut arguments: Vec<Box<Node>> = vec![];
                     loop {
-                        let next = word_list.peek();
+                        let next = parser.peek();
                         if is_ctrl_word(&next, ")") {
                             break;
                         }
-                        let express = parse_expression(word_list, 0)?;
+                        let express = parse_expression(parser, 0)?;
                         arguments.push(Box::new(express));
-                        let next = word_list.peek();
+                        let next = parser.peek();
                         if !is_ctrl_word(&next, ",") {
                             break;
                         }
@@ -179,8 +192,8 @@ fn parse_expression(word_list: &mut WordList, min_level: u8) -> Result<Node, Str
             },
             _ => return Err("operator err".to_string()),
         }
-        word_list.next();
-        let right = parse_expression(word_list, l + 1)?;
+        parser.next();
+        let right = parse_expression(parser, l + 1)?;
 
         if is_ctrl_word(operator, ".") {
             left = Node::MemberExpression {
@@ -233,7 +246,7 @@ fn get_level(token: &Token) -> Result<u8, String> {
     Ok(d)
 }
 
-fn is_ctrl_word(word: &Token, str: &str) -> bool {
+pub fn is_ctrl_word(word: &Token, str: &str) -> bool {
     match word {
         Token::Control(s) => {
             if s == str {
@@ -245,9 +258,48 @@ fn is_ctrl_word(word: &Token, str: &str) -> bool {
     }
 }
 
-fn is_ctrl(word: &Token) -> bool {
+pub fn is_ctrl(word: &Token) -> bool {
     match word {
         Token::Control(_) => true,
         _ => false,
+    }
+}
+
+pub fn skip_empty(parser: &mut Parser) -> Token {
+    loop {
+        match &parser.current {
+            Token::Control(next) => match next.as_str() {
+                "\r" | "\n" | " " | "\t" => {}
+                _ => break,
+            },
+            _ => break,
+        }
+        parser.next();
+    }
+    parser.current.clone()
+}
+
+pub fn expect(word: &Token, s: &str) -> Result<(), String> {
+    match word {
+        Token::Control(next) => {
+            if next != s {
+                return Err(format!("expect {s}"));
+            }
+        }
+        _ => return Err(format!("expect {s}")),
+    }
+    Ok(())
+}
+
+pub fn expect_keys(word: &Token, list: Vec<&str>) -> Result<String, String> {
+    match word {
+        Token::Variable(s) => {
+            if !list.contains(&s.as_str()) {
+                Err(format!("expect {s}"))
+            } else {
+                Ok(s.to_string())
+            }
+        }
+        _ => Err(format!("expect {list:?}")),
     }
 }

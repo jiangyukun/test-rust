@@ -2,7 +2,6 @@ pub fn lex(str: &str) -> Vec<Token> {
     let mut result: Vec<Token> = vec![];
     let mut i = 0;
     loop {
-        // print!("main {i}\n");
         if i >= str.len() {
             return result;
         }
@@ -30,14 +29,44 @@ pub fn lex(str: &str) -> Vec<Token> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
-    Empty,
+    LF,
+    CR,
+
+    Var,
     Let,
+    Const,
+    Undefined,
+    Null,
+    Await,
+    Async,
+    Function,
+    With,
+    If,
+    Switch,
+    Case,
+    Break,
+    Continue,
     For,
+    While,
+
     Variable(String),
     Digit(String),
     String,
     Control(String),
     EOF,
+}
+
+pub struct Lex {
+    input: String,
+    pos: usize,
+}
+impl Lex {
+    pub fn new(input: String) -> Self {
+        Lex { input, pos: 0 }
+    }
+    pub fn next() -> Token {
+
+    }
 }
 
 fn read_word(i: &mut usize, source: &str) -> Token {
@@ -110,63 +139,9 @@ fn read_digit(i: &mut usize, source: &str) -> Token {
                 _ => {
                     break;
                 }
-            }
-            None => break
+            },
+            None => break,
         }
     }
     Token::Digit(word)
-}
-
-pub struct WordList {
-    pub index: usize,
-    pub list: Vec<Token>,
-}
-
-impl WordList {
-    pub fn current(&mut self) -> Token {
-        self.peek_n(0)
-    }
-    pub fn next(&mut self) -> &Token {
-        self.index += 1;
-        self.list.get(self.index).unwrap_or_else(|| &Token::EOF)
-    }
-    pub fn next1(&mut self) {
-        self.index += 1;
-    }
-    pub fn before(&mut self) {
-        self.index -= 1
-    }
-    pub fn peek(&self) -> Token {
-        self.peek_n(1)
-    }
-    pub fn peek_n(&self, n: usize) -> Token {
-        self.list
-            .get(self.index + n)
-            .unwrap_or_else(|| &Token::EOF)
-            .clone()
-    }
-    pub fn peek_not_empty_n(&self, n: usize) -> &Token {
-        let mut not_empty_c: usize = 0;
-        let mut peek_index: usize = 0;
-        loop {
-            match self.peek_n(peek_index) {
-                Token::Control(s) => match s.as_str() {
-                    "\r" | "\n" | "\t" => {
-                        peek_index += 1;
-                        continue;
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-            if not_empty_c == n {
-                break;
-            }
-            peek_index += 1;
-            not_empty_c += 1;
-        }
-        self.list
-            .get(self.index + peek_index)
-            .unwrap_or_else(|| &Token::EOF)
-    }
 }
