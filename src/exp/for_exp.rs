@@ -1,21 +1,25 @@
+use crate::exp::declaration_exp::build_let;
 use crate::express::Node::*;
-use crate::express::{Node, expect, is_ctrl_word, parse_expression};
+use crate::express::{Node, expect, expect_keyword, is_ctrl_word, ok_box, parse_expression};
+use crate::lex::Token;
 use crate::parser::Parser;
 
-pub fn build_for(parser: &mut Parser) -> Result<Node, String> {
+pub fn build_for(parser: &mut Parser) -> Result<Box<Node>, String> {
     let init: Box<Node>;
     let test: Box<Node>;
     let update: Box<Node>;
     let body: Box<Node>;
-    expect(&parser.current, "for")?;
+    expect_keyword(&parser.current, Token::For)?;
     parser.next();
     expect(&parser.current, "(")?;
     parser.next();
     let part1 = &parser.current;
-    if is_ctrl_word(&part1, ";") {
+    if *part1 == Token::Let {
+        init = build_let(parser)?;
+    } else if is_ctrl_word(&part1, ";") {
         init = Box::new(EmptyStatement {});
     } else {
-        init = Box::new(parse_expression(parser, 0)?);
+        init = parse_expression(parser, 0)?;
     }
 
     parser.next();
@@ -25,7 +29,7 @@ pub fn build_for(parser: &mut Parser) -> Result<Node, String> {
     if is_ctrl_word(&part2, ";") {
         test = Box::new(EmptyStatement {});
     } else {
-        test = Box::new(parse_expression(parser, 0)?);
+        test = parse_expression(parser, 0)?;
     }
 
     parser.next();
@@ -33,7 +37,7 @@ pub fn build_for(parser: &mut Parser) -> Result<Node, String> {
     parser.next();
     let part3 = &parser.current;
     if is_ctrl_word(&part3, ")") {
-        update = Box::new(parse_expression(parser, 0)?);
+        update = parse_expression(parser, 0)?;
     } else {
         update = Box::new(EmptyStatement {});
     }
@@ -42,7 +46,7 @@ pub fn build_for(parser: &mut Parser) -> Result<Node, String> {
     expect(&parser.current, ")")?;
     parser.next();
     if is_ctrl_word(&parser.current, "{") {
-        body = Box::new(parse_expression(parser, 0)?);
+        body = parse_expression(parser, 0)?;
         parser.next();
         expect(&parser.current, "}")?;
     } else if is_ctrl_word(&parser.current, ";") {
@@ -50,7 +54,7 @@ pub fn build_for(parser: &mut Parser) -> Result<Node, String> {
     } else {
         return Err("for body error".to_string());
     }
-    Ok(ForStatement {
+    ok_box(ForStatement {
         init,
         test,
         update,
@@ -58,3 +62,16 @@ pub fn build_for(parser: &mut Parser) -> Result<Node, String> {
     })
 }
 
+#[cfg(test)]
+mod test {
+    use crate::exp::for_exp::build_for;
+    use crate::parser::Parser;
+
+    #[test]
+    fn test_for() {
+        let mut parser = Parser::new("for(let i =1; i < 10;i++) {}".to_string());
+
+        let result = build_for(&mut parser);
+        println!("{result:#?}");
+    }
+}

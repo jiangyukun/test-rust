@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     LF,
@@ -20,14 +22,47 @@ pub enum Token {
     For,
     While,
 
-
-
-
     Variable(String),
     Digit(String),
     String,
     Control(String),
     EOF,
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Control(s) => {
+                write!(f, "{}", s)
+            }
+            Token::Variable(s) => {
+                write!(f, "{}", s)
+            }
+            Token::Digit(s) => {
+                write!(f, "{}", s)
+            }
+            Token::Var => write!(f, "Var"),
+            Token::Let => write!(f, "Let"),
+            Token::Const => write!(f, "Const"),
+            Token::Undefined => write!(f, "Undefined"),
+            Token::Null => write!(f, "Null"),
+            Token::Await => write!(f, "Await"),
+            Token::Async => write!(f, "Async"),
+            Token::Function => write!(f, "Function"),
+            Token::With => write!(f, "With"),
+            Token::If => write!(f, "If"),
+            Token::Switch => write!(f, "Switch"),
+            Token::Case => write!(f, "Case"),
+            Token::Break => write!(f, "Break"),
+            Token::Continue => write!(f, "Continue"),
+            Token::For => write!(f, "For"),
+            Token::While => write!(f, "While"),
+            Token::EOF => write!(f, "EOF"),
+            _ => {
+                write!(f, "token")
+            }
+        }
+    }
 }
 
 pub struct Lex {
@@ -83,23 +118,44 @@ fn read_word(i: &mut usize, source: &str) -> Token {
             None => break,
         }
     }
-    Token::Variable(word)
+    match word.as_str() {
+        "var" => Token::Var,
+        "let" => Token::Let,
+        "const" => Token::Const,
+        "undefined" => Token::Undefined,
+        "null" => Token::Null,
+        "await" => Token::Await,
+        "async" => Token::Async,
+        "function" => Token::Function,
+        "with" => Token::With,
+        "if" => Token::If,
+        "switch" => Token::Switch,
+        "case" => Token::Case,
+        "break" => Token::Break,
+        "continue" => Token::Continue,
+        "for" => Token::For,
+        "while" => Token::While,
+        _ => Token::Variable(word),
+    }
 }
 
 fn read_operation(i: &mut usize, source: &str) -> Token {
-    let mut c = source.chars().nth(*i).unwrap();
+    let c = source.chars().nth(*i).unwrap();
     let mut word = String::new();
     word.push(c);
     loop {
         *i = *i + 1;
-        c = source.chars().nth(*i).unwrap();
+        let c = source.chars().nth(*i);
         match c {
-            '=' | '+' | '-' | '*' | '/' | '%' | '>' | '<' | '|' | '?' | ':' => {
-                word.push(c);
-            }
-            _ => {
-                break;
-            }
+            Some(c) => match c {
+                '=' | '+' | '-' | '*' | '/' | '%' | '>' | '<' | '|' | '?' | ':' => {
+                    word.push(c);
+                }
+                _ => {
+                    break;
+                }
+            },
+            None => break,
         }
     }
     Token::Control(word)
@@ -148,6 +204,19 @@ fn read_digit(i: &mut usize, source: &str) -> Token {
 #[cfg(test)]
 mod tests {
     use crate::lex::{Lex, Token};
+
+    #[test]
+    fn test_token_display() {
+        let a = Token::For;
+        println!("{a}")
+    }
+
+    #[test]
+    fn test_keyword() {
+        let input = "for(let i = 1; i < 10;i++)++";
+        let mut lex = Lex::new(input.to_string());
+        assert_eq!(lex.next(), Token::For);
+    }
 
     #[test]
     fn test_lex() {
