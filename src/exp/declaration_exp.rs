@@ -51,3 +51,32 @@ fn build_declarator(parser: &mut Parser) -> Result<Box<Node>, String> {
     }
     Err(format!("expect Variable, find {id}"))
 }
+
+#[cfg(test)]
+mod test_let {
+    use super::*;
+    //
+    // #[test]
+    // fn test() {
+    //     let mut parser = Parser::new("let a = 1".to_string());
+    //
+    //     let result = build_let(&mut parser);
+    //     println!("{result:#?}");
+    // }
+    //
+    // #[test]
+    // fn test_express() {
+    //     let mut parser = Parser::new("let a = 1 + 2".to_string());
+    //
+    //     let result = build_let(&mut parser);
+    //     println!("{result:#?}");
+    // }
+
+    #[test]
+    fn test_comma() {
+        let mut parser = Parser::new("let a = 3, b = 2".to_string());
+
+        let result = build_let(&mut parser);
+        println!("{result:#?}");
+    }
+}

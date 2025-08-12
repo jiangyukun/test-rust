@@ -55,46 +55,43 @@ pub enum Node {
         init: Box<Node>,
         test: Box<Node>,
         update: Box<Node>,
-        body: Box<Node>,
+        body: Box<Vec<Box<Node>>>,
     },
 }
 
 pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>, String> {
     let word = parser.current.clone();
-    if is_ctrl(&word) {
-        let l = get_level(&word)?;
-        if let Token::Control(s) = word {
-            match s.as_str() {
-                "++" => {
-                    parser.next();
-                    return Ok(Box::new(Node::UpdateExpression {
-                        operator: s.to_string(),
-                        prefix: true,
-                        argument: parse_expression(parser, l + 1)?,
-                    }));
-                }
-                "+" | "-" | "!" | "typeof" => {
-                    parser.next();
-                    return Ok(Box::new(Node::UnaryExpression {
-                        operator: s.to_string(),
-                        prefix: true,
-                        argument: parse_expression(parser, l + 1)?,
-                    }));
-                }
-                "(" => {
-                    parser.next();
-                    let express = parse_expression(parser, 1)?;
-                    parser.next();
-                    if !is_ctrl_word(&parser.current, ")") {
-                        return Err("expect )".to_string());
-                    }
-                    parser.next();
-                    return Ok(express);
-                }
-                _ => {}
+    if let Token::Control(s) = word {
+        let l = get_level(&parser.current)?;
+        return match s.as_str() {
+            "++" => {
+                parser.next();
+                Ok(Box::new(Node::UpdateExpression {
+                    operator: s.to_string(),
+                    prefix: true,
+                    argument: parse_expression(parser, l + 1)?,
+                }))
             }
-        }
-        return Err("expect control,".to_string());
+            "+" | "-" | "!" | "typeof" => {
+                parser.next();
+                Ok(Box::new(Node::UnaryExpression {
+                    operator: s.to_string(),
+                    prefix: true,
+                    argument: parse_expression(parser, l + 1)?,
+                }))
+            }
+            "(" => {
+                parser.next();
+                let express = parse_expression(parser, 1)?;
+                parser.next();
+                if !is_ctrl_word(&parser.current, ")") {
+                    return Err("expect )".to_string());
+                }
+                parser.next();
+                Ok(express)
+            }
+            _ => Err("expect control,".to_string()),
+        };
     }
     let mut left: Result<Box<Node>, String>;
 
@@ -128,7 +125,8 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
             break;
         }
         parser.next();
-        match &parser.current {
+        let operator = parser.current.clone();
+        match &operator {
             Token::Control(s) => match s.as_str() {
                 "++" | "--" => {
                     return ok_box(Node::UpdateExpression {
@@ -139,7 +137,7 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
                 }
                 "?" => {
                     parser.next();
-                    let consequent = parse_expression(parser, l + 1)?;
+                    let consequent = parse_expression(parser, l)?;
                     parser.next();
                     if !is_ctrl_word(&parser.current, ":") {
                         return Err("expect :".to_string());
@@ -176,14 +174,6 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
                         arguments,
                     });
                 }
-                _ => {}
-            },
-            _ => return Err("operator err".to_string()),
-        }
-
-        let operator = parser.current.clone();
-        match &operator {
-            Token::Control(s) => match s.as_str() {
                 "=" => {
                     parser.next();
                     let right = parse_expression(parser, l + 1)?;
@@ -191,6 +181,14 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
                         operator: s.to_string(),
                         left: left?,
                         right,
+                    })
+                }
+                "." => {
+                    parser.next();
+                    let right = parse_expression(parser, l + 1)?;
+                    left = ok_box(Node::MemberExpression {
+                        object: left?,
+                        property: right,
                     })
                 }
                 "+" | "-" | "*" | "/" | "%" | ">" | "<" | ">=" | "<=" => {
@@ -221,7 +219,7 @@ pub fn ok_box(node: Node) -> Result<Box<Node>, String> {
 fn get_level(token: &Token) -> Result<u8, String> {
     let d = match token {
         Token::Control(s) => match s.as_str() {
-            "." | "[" | "]" | "(" | ")" | "?." => 20,
+            "." | "[" | "(" | "?." => 20,
             "new" => 19,
             "++" | "--" => 17,
             "!" | "~" | "typeof" | "await" | "delete" => 16,
@@ -235,7 +233,7 @@ fn get_level(token: &Token) -> Result<u8, String> {
             "|" => 7,
             "&&" => 6,
             "||" => 5,
-            "?" | ":" => 3,
+            "?" => 3,
             "=" | "+=" | "-=" | "*=" | "/=" | "%=" => 2,
             "," => 1,
             _ => return Err(format!("get level err {token}")),
@@ -316,7 +314,6 @@ mod test {
     fn test_dot() {
         let mut parser = Parser::new("a.b.c".to_string());
         let node = parse_expression(&mut parser, 1);
-        // print!("{node:#?}\n");
         let result = MemberExpression {
             object: Box::new(MemberExpression {
                 object: Box::new(Identity {
@@ -331,6 +328,13 @@ mod test {
             }),
         };
         assert_eq!(node, ok_box(result))
+    }
+
+    #[test]
+    fn test_question() {
+        let mut parser = Parser::new("a = b ? c ? d : e : f".to_string());
+        let node = parse_expression(&mut parser, 1);
+        print!("{node:#?}\n");
     }
 
     #[test]

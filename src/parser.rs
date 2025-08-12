@@ -3,15 +3,18 @@ use crate::lex::{Lex, Token};
 pub struct Parser {
     pub current: Token,
     pub lookahead: Token,
+    pub list: Vec<Token>,
     lex: Lex,
 }
 
 impl Parser {
     pub fn new(input: String) -> Parser {
         let mut lex = Lex::new(input.to_string());
+        let current = lex.next();
         let parser = Parser {
-            current: lex.next(),
+            current: current.clone(),
             lookahead: lex.next(),
+            list: vec![current],
             lex,
         };
 
@@ -20,6 +23,7 @@ impl Parser {
 
     pub fn next(&mut self) {
         self.current = self.lookahead.clone();
+        self.list.push(self.current.clone());
         self.lookahead = self.lex.next();
     }
 }
@@ -31,7 +35,6 @@ mod test {
 
     #[test]
     fn test1() {
-
         let mut parser = Parser::new(" \n let \n a \n = \n b\n ".to_string());
 
         assert_eq!(Token::Variable("let".to_string()), parser.current);

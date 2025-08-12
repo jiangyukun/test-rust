@@ -8,7 +8,7 @@ pub fn build_for(parser: &mut Parser) -> Result<Box<Node>, String> {
     let init: Box<Node>;
     let test: Box<Node>;
     let update: Box<Node>;
-    let body: Box<Node>;
+    let mut body: Box<Vec<Box<Node>>>= Box::new(vec![]);
     expect_keyword(&parser.current, Token::For)?;
     parser.next();
     expect(&parser.current, "(")?;
@@ -37,20 +37,24 @@ pub fn build_for(parser: &mut Parser) -> Result<Box<Node>, String> {
     parser.next();
     let part3 = &parser.current;
     if is_ctrl_word(&part3, ")") {
-        update = parse_expression(parser, 0)?;
-    } else {
         update = Box::new(EmptyStatement {});
+    } else {
+        update = parse_expression(parser, 0)?;
     }
 
     parser.next();
     expect(&parser.current, ")")?;
     parser.next();
     if is_ctrl_word(&parser.current, "{") {
-        body = parse_expression(parser, 0)?;
         parser.next();
+        if !is_ctrl_word(&parser.current, "}") {
+            body.push(parse_expression(parser, 0)?);
+            parser.next();
+        }
         expect(&parser.current, "}")?;
+        parser.next();
     } else if is_ctrl_word(&parser.current, ";") {
-        body = Box::new(EmptyStatement {});
+        parser.next();
     } else {
         return Err("for body error".to_string());
     }
@@ -70,6 +74,24 @@ mod test {
     #[test]
     fn test_for() {
         let mut parser = Parser::new("for(let i =1; i < 10;i++) {}".to_string());
+
+        let result = build_for(&mut parser);
+        println!("{result:#?}");
+    }
+
+
+    #[test]
+    fn test_for_empty() {
+        let mut parser = Parser::new("for(let i =1; i < 10;i++);".to_string());
+
+        let result = build_for(&mut parser);
+        println!("{result:#?}");
+    }
+
+
+    #[test]
+    fn test_for_empty2() {
+        let mut parser = Parser::new("for(let i =1; i < 10;i++);".to_string());
 
         let result = build_for(&mut parser);
         println!("{result:#?}");
