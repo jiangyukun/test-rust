@@ -1,6 +1,7 @@
-use crate::express::Node::{VariableDeclaration, VariableDeclarator};
-use crate::express::{Node, expect_keys, is_ctrl_word, parse_expression};
+use crate::express::{expect_keys, is_ctrl_word, parse_expression};
 use crate::lex::Token;
+use crate::node::Node;
+use crate::node::Node::{VariableDeclaration, VariableDeclarator};
 use crate::parser::Parser;
 
 pub fn build_let(parser: &mut Parser) -> Result<Box<Node>, String> {
@@ -55,22 +56,22 @@ fn build_declarator(parser: &mut Parser) -> Result<Box<Node>, String> {
 #[cfg(test)]
 mod test_let {
     use super::*;
-    //
-    // #[test]
-    // fn test() {
-    //     let mut parser = Parser::new("let a = 1".to_string());
-    //
-    //     let result = build_let(&mut parser);
-    //     println!("{result:#?}");
-    // }
-    //
-    // #[test]
-    // fn test_express() {
-    //     let mut parser = Parser::new("let a = 1 + 2".to_string());
-    //
-    //     let result = build_let(&mut parser);
-    //     println!("{result:#?}");
-    // }
+
+    #[test]
+    fn test() {
+        let mut parser = Parser::new("let a = 1".to_string());
+
+        let result = build_let(&mut parser);
+        println!("{result:#?}");
+    }
+
+    #[test]
+    fn test_express() {
+        let mut parser = Parser::new("let a = 1 + 2".to_string());
+
+        let result = build_let(&mut parser);
+        println!("{result:#?}");
+    }
 
     #[test]
     fn test_comma() {

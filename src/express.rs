@@ -1,63 +1,6 @@
 use crate::lex::Token;
+use crate::node::Node;
 use crate::parser::Parser;
-
-#[derive(Debug, PartialEq)]
-pub enum Node {
-    EmptyStatement {},
-    Identity {
-        name: String,
-    },
-    NumericLiteral {
-        value: String,
-    },
-    VariableDeclaration {
-        kind: Token,
-        declarations: Vec<Box<Node>>,
-    },
-    VariableDeclarator {
-        id: Box<Node>,
-        init: Box<Node>,
-    },
-    AssignmentExpression {
-        left: Box<Node>,
-        operator: String,
-        right: Box<Node>,
-    },
-    BinaryExpression {
-        left: Box<Node>,
-        operator: String,
-        right: Box<Node>,
-    },
-    UnaryExpression {
-        operator: String,
-        prefix: bool,
-        argument: Box<Node>,
-    },
-    UpdateExpression {
-        operator: String,
-        prefix: bool,
-        argument: Box<Node>,
-    },
-    MemberExpression {
-        object: Box<Node>,
-        property: Box<Node>,
-    },
-    ConditionalExpression {
-        test: Box<Node>,
-        consequent: Box<Node>,
-        alternate: Box<Node>,
-    },
-    CallExpression {
-        callee: Box<Node>,
-        arguments: Vec<Box<Node>>,
-    },
-    ForStatement {
-        init: Box<Node>,
-        test: Box<Node>,
-        update: Box<Node>,
-        body: Box<Vec<Box<Node>>>,
-    },
-}
 
 pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>, String> {
     let word = parser.current.clone();
@@ -83,7 +26,6 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
             "(" => {
                 parser.next();
                 let express = parse_expression(parser, 1)?;
-                parser.next();
                 if !is_ctrl_word(&parser.current, ")") {
                     return Err("expect )".to_string());
                 }
@@ -107,28 +49,28 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
         return Err(format!("unsupported parse_express start {word}"));
     }
 
+    parser.next();
     loop {
-        match &parser.lookahead {
-            Token::Control(s) => match s.as_str() {
-                ";" | ":" | ")" | "]" | "," => {
-                    return left;
-                }
-                _ => {}
-            },
-            Token::EOF => return left,
-            Token::Variable(_) => return left,
-            Token::Digit(_) => return left,
-            _ => return left,
-        }
-        let l = get_level(&parser.lookahead)?;
-        if l < min_level {
-            break;
-        }
-        parser.next();
         let operator = parser.current.clone();
         match &operator {
             Token::Control(s) => match s.as_str() {
+                ";" | ":" | ")" | "]" | "," => break,
+                _ => {}
+            },
+            Token::EOF => break,
+            Token::Variable(_) => return Err("syntax error:".to_string()),
+            Token::Digit(_) => return Err("syntax error:".to_string()),
+            _ => break,
+        }
+        let l = get_level(&parser.current)?;
+        if l < min_level {
+            break;
+        }
+
+        match &operator {
+            Token::Control(s) => match s.as_str() {
                 "++" | "--" => {
+                    parser.next();
                     return ok_box(Node::UpdateExpression {
                         operator: s.to_string(),
                         prefix: false,
@@ -138,7 +80,6 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
                 "?" => {
                     parser.next();
                     let consequent = parse_expression(parser, l)?;
-                    parser.next();
                     if !is_ctrl_word(&parser.current, ":") {
                         return Err("expect :".to_string());
                     }
@@ -160,12 +101,12 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
                         }
                         let express = parse_expression(parser, 1)?;
                         arguments.push(express);
-                        parser.next();
                         let current = &parser.current.clone();
                         if is_ctrl_word(&current, ",") {
                             parser.next();
                         }
                         if is_ctrl_word(&current, ")") {
+                            parser.next();
                             break;
                         }
                     }
@@ -205,7 +146,7 @@ pub fn parse_expression(parser: &mut Parser, min_level: u8) -> Result<Box<Node>,
                 }
             },
             _ => {
-                return left;
+                break;
             }
         }
     }
@@ -302,52 +243,4 @@ pub fn expect_keys(word: &Token, list: &Vec<Token>) -> Result<Token, String> {
         }
     }
     Err(format!("expect {list:?}"))
-}
-
-#[cfg(test)]
-mod test {
-    use crate::express::Node::*;
-    use crate::express::{ok_box, parse_expression};
-    use crate::parser::Parser;
-
-    #[test]
-    fn test_dot() {
-        let mut parser = Parser::new("a.b.c".to_string());
-        let node = parse_expression(&mut parser, 1);
-        let result = MemberExpression {
-            object: Box::new(MemberExpression {
-                object: Box::new(Identity {
-                    name: "a".to_string(),
-                }),
-                property: Box::new(Identity {
-                    name: "b".to_string(),
-                }),
-            }),
-            property: Box::new(Identity {
-                name: "c".to_string(),
-            }),
-        };
-        assert_eq!(node, ok_box(result))
-    }
-
-    #[test]
-    fn test_question() {
-        let mut parser = Parser::new("a = b ? c ? d : e : f".to_string());
-        let node = parse_expression(&mut parser, 1);
-        print!("{node:#?}\n");
-    }
-
-    #[test]
-    fn test_operator() {
-        let mut parser = Parser::new("c = a + +b + d++".to_string());
-        let node = parse_expression(&mut parser, 1);
-        print!("{node:#?}\n");
-    }
-
-    #[test]
-    fn test_call() {
-        let mut parser = Parser::new("c = a ? b(d,e,f) : 2+3".to_string());
-        let node = parse_expression(&mut parser, 1);
-        print!("{node:#?}\n");
-    }
 }

@@ -223,7 +223,7 @@ mod tests {
         let input = " \n\n\nlet\n\n\n a\n\n\n =\n\n\n 1\n\n\n + \n\n\n2\n\n\n";
         let mut lex = Lex::new(input.to_string());
 
-        assert_eq!(lex.next(), Token::Variable("let".to_string()));
+        assert_eq!(lex.next(), Token::Let);
         assert_eq!(lex.next(), Token::Variable("a".to_string()));
         assert_eq!(lex.next(), Token::Control("=".to_string()));
         assert_eq!(lex.next(), Token::Digit("1".to_string()));
